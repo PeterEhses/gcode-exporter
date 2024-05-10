@@ -239,6 +239,31 @@ class gcode_export(Operator):
         except:
             return False
 
+    def extract_radii_from_named_attribute(self, mesh, attribute_name):
+        """
+        Extracts radii values from a named attribute on the given mesh object.
+
+        Args:
+            mesh: The mesh object to extract radii from.
+            attribute_name (str): The name of the named attribute containing radii.
+
+        Returns:
+            list[float] | None: A list of radii values for each vertex, or None if
+                                  the attribute is not found or has the wrong data type.
+        """
+        # Check if named attribute exists and has float data type
+        if attribute_name not in mesh.attributes:
+            print(f"Warning: Named attribute '{attribute_name}' not found on mesh.")
+            return None
+        elif mesh.attributes[attribute_name].data_type != 'FLOAT':
+            print(f"Warning: Named attribute '{attribute_name}' has incorrect data type (expected float).")
+            return None
+        # Extract radii from the attribute
+        radii = [attr.value for attr in mesh.attributes[attribute_name].data]
+
+        return radii
+
+    
     def execute(self, context):
         scene = context.scene
         props = scene.gcode_settings
@@ -265,9 +290,13 @@ class gcode_export(Operator):
             edges = [list(e.vertices) for e in mesh.edges]
             verts = [v.co for v in mesh.vertices]
             radii = [1]*len(verts)
+            extrusion_multiplier = self.extract_radii_from_named_attribute(mesh, 'extrusion_multiplier')
+            if extrusion_multiplier is not None:
+                radii = extrusion_multiplier
+                use_curve_thickness = True
             ordered_verts = find_curves(edges, len(mesh.vertices))
             ob = curve_from_pydata(verts, radii, ordered_verts, name='__temp_curve__', merge_distance=0.1, set_active=False)
-
+            ob.data.bevel_depth = 1
         vertices = [[matr @ p.co.xyz for p in s.points] for s in ob.data.splines]
         if use_curve_thickness:
             bevel_depth = ob.data.bevel_depth
